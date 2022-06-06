@@ -7,7 +7,7 @@
 \format{
 Geometry of coastlines "sfc_MULTILINESTRING"
 \describe{
-\item{}{Geometry of coastlines "sfc_MULTILINESTRING"}
+\item{MULTILINESTRING}{Geometry of coastlines "sfc_MULTILINESTRING"}
 data(coastlines)
 }
 }

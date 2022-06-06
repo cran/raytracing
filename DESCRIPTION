@@ -1,7 +1,7 @@
 Package: raytracing
 Title: Rossby Wave Ray Tracing
-Version: 0.1.0
-Date: 2020-10-22
+Version: 0.6.0
+Date: 2022-06-06
 Authors@R: c(person(given = "Amanda",
                     family = "Rehbein",
                     role = c("aut", "cre"),
@@ -34,14 +34,14 @@ Imports: ncdf4, graphics, sf, units, utils
 Suggests: testthat, covr, lwgeom
 URL: https://github.com/salvatirehbein/raytracing/
 BugReports: https://github.com/salvatirehbein/raytracing/issues/
-RoxygenNote: 7.1.1
+RoxygenNote: 7.2.0
 Depends: R (>= 3.5.0)
 NeedsCompilation: no
-Packaged: 2020-11-09 23:19:54 UTC; amanda
+Packaged: 2022-06-06 22:57:11 UTC; amanda
 Author: Amanda Rehbein [aut, cre] (<https://orcid.org/0000-0002-8714-7931>),
   Tercio Ambrizzi [sad],
   Sergio Ibarra-Espinosa [ctb] (<https://orcid.org/0000-0002-3162-1905>),
   Lívia Márcia Mosso Dutra [rtm]
 Maintainer: Amanda Rehbein <amanda.rehbein@usp.br>
 Repository: CRAN
-Date/Publication: 2020-11-14 14:50:02 UTC
+Date/Publication: 2022-06-06 23:30:02 UTC

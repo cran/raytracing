@@ -29,6 +29,8 @@
 #' It controls the wave displacement:
 #' If 1, the wave goes to the north of the source;
 #' If -1, the wave goes to the south of the source.
+#' @param cx numeric. Indicates the zonal phase speed. The program is designed
+#' for eastward propagation (cx > 0) and stationary waves (cx = 0, the default).
 #' @param interpolation Character. Set the interpolation method to be used:
 #' \code{\link{trin}} or \code{\link{ypos}}
 #' @param tl Numeric value; Turning latitude. Do not change this!
@@ -41,8 +43,8 @@
 #' during compilation
 #' @seealso \code{\link{ray_source}}
 #' @return sf data.frame
-#' @importFrom utils write.csv
 #' @importFrom sf st_as_sf
+#' @importFrom utils write.csv
 #' @export
 #' @examples {
 #' # For Coelho et al. (2015):
@@ -59,6 +61,7 @@
 #'           y0 = -30,
 #'           dt = 6,
 #'           direction = -1,
+#'           cx = 0,
 #'           interpolation = "trin")
 #' rp <- ray_path(rt$lon, rt$lat)
 #' plot(rp,
@@ -76,13 +79,22 @@ ray <- function(betam,
                 dt,
                 itime,
                 direction,
+                cx = 0,
                 interpolation = "trin",
                 tl = 1,
                 a = 6371000,
                 verbose = FALSE,
                 ofile){
+  # cx
+  if (cx < 0) {
+    stop(paste0("cx = ", cx,"\nZonal phase speed (cx) must be equal or greater than zero.\n",
+                "For westward wave propagations, please contact the developer\n",
+                "(amanda.rehbein@usp.br)"))
+  }
 
-  dt <- dt * 60 * 60
+  if(abs(x0) > 180) {
+    stop("Please enter a value x0 between -180 and 180")
+  }
 
   # must be from north to south
   if(!is.unsorted(lat)) { # is sorted from south to north
@@ -95,6 +107,7 @@ ray <- function(betam,
     uz <- colMeans(u, na.rm = TRUE)              # in latlon coord.
   }
 
+  dt <- dt * 60 * 60
   phirad <- lat*pi/180
 
   k <- K/a
@@ -105,7 +118,6 @@ ray <- function(betam,
   l_time <- list()
   l_x0 <- list()
   l_y0 <- list()
-
 
   count <- 0
   while(TRUE) {
@@ -126,7 +138,11 @@ ray <- function(betam,
 
     }
 
-    Ks2_y0 <- beta_y0/u_y0
+    # Transform cx in mercator
+    cx_y0 <- cx/cos(y0*pi/180)
+
+
+    Ks2_y0 <- beta_y0/(u_y0 - cx_y0)
     l2_y0 <- Ks2_y0 - k2
 
     ## Skip to the next timestep
@@ -135,9 +151,9 @@ ray <- function(betam,
      if(round(l2_y0, 13) <= 0) tl <- -1
 
     # Break 2
-    if(Ks2_y0 < 0) break
+    if(u_y0 == cx_y0 | Ks2_y0 < 0) break
 
-    ug0 <-(2 * beta_y0 * k2 / Ks2_y0^2 ) * 180 / (a*pi)
+    ug0 <-(cx_y0 + 2 * beta_y0 * k2 / Ks2_y0^2 ) * 180 / (a*pi)
 
     vg0 <- (direction * tl *
               2 * beta_y0 * k * sqrt(abs(l2_y0))*
@@ -157,7 +173,10 @@ ray <- function(betam,
 
     }
 
-    Ks2_y1 <- beta_y1/u_y1
+    # Transform cx in mercator
+    cx_y1 <- cx/cos(y1*pi/180)
+
+    Ks2_y1 <- beta_y1/(u_y1 - cx_y1)
     l2_y1 <- Ks2_y1 - k2
 
     # Skip to the next timestep
@@ -166,9 +185,9 @@ ray <- function(betam,
     if(round(l2_y1, 13) < 0) tl <- -1
 
     # Break 3
-    if(Ks2_y1  < 0) break
+    if(u_y1 == cx_y1 | Ks2_y1  < 0) break
 
-    ug1 <-  (2 * beta_y1 * k2 / Ks2_y1^2 ) * 180 / (a*pi)
+    ug1 <-  (cx_y1 + 2 * beta_y1 * k2 / Ks2_y1^2 ) * 180 / (a*pi)
 
     vg1 <- (direction * tl *
               2 * beta_y1 * k * sqrt(abs(l2_y1))*
@@ -176,6 +195,8 @@ ray <- function(betam,
 
     x2 <- x0 + 0.5*dt*(ug0+ug1)
     y2 <- y0 + 0.5*dt*(vg0+vg1)
+
+    x2 <- ifelse(x2 > 180, x2 - 360, x2)
 
     x0 <- x2
     y0 <- y2
@@ -207,7 +228,7 @@ ray <- function(betam,
                          crs = 4326)
 
   if(!missing(ofile)) {
-    utils::write.csv(x = pontos, file = ofile, row.names = FALSE)
+    write.csv(x = pontos, file = ofile)
   }
   return(pontos)
 }

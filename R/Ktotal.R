@@ -1,18 +1,15 @@
-#' Calculates Beta and Ks
+#' Calculates Total Wavenumber for Rossby Waves (K)
 #'
-#' \code{betaks} ingests the time-mean zonal wind (u), transform it in
-#' mercator coordinates (um); calculates the meridional gradient of
-#' the absolute vorticity (beta) in mercator coordinates (betam);
-#' and, finally, calculates stationary wavenumber (Ks) in mercator coordinates
-#' (ksm) (see: Hoskins and Ambrizzi, 1993). \code{betaks} returns the um, betam,
-#' and lat, for being ingested in \code{\link{ray}} or
-#' \code{\link{ray_source}}.
+#' \code{Ktotal} ingests the time-mean zonal wind (u) and calculates the Rossby
+#' wavenumber (K) (non-zero frequency waves) in mercator coordinates.
+#' In this code Ktotal is used to distinguish the total wavenumber (K) from
+#' zonal wave number (k). For stationary Rossby Waves, please see \code{\link{Ks}}.
+#' \code{Ktotal} returns a list with K in mercator coordinates (ktotal_m).
 #'
 #' @param u String indicating the input data filename. The file to be
 #' passed consists in a netCDF file with only time-mean zonal wind at one
 #' pressure level, latitude in ascending order (not a requisite), and longitude
-#' from 0 to 360.
-#' It is required that the read dimensions express
+#' from 0 to 360. It is required that the read dimensions express
 #' longitude (in rows) x latitude (in columns).
 #' \strong{u} also can be a numerical matrix with time-mean zonal wind at one
 #' pressure level, latitude in ascending order (not a requisite), and longitude
@@ -22,13 +19,15 @@
 #' If missing, will not return a netCDF file
 #' @param uname String indicating the variable name field
 #' @param lat String indicating the name of the latitude field. If
-#' \strong{u} is a matrix, \strong{lat} must be numeric.
+#' \strong{u} is a matrix, \strong{lat} must be numeric
 #' @param lon String indicating the name of the longitude field.If
 #' \strong{u} is a matrix, \strong{lon} must be numeric from 0 to 360.
+#' @param cx numeric. Indicates the zonal phase speed. Must be greater than zero.
+#' For cx equal to zero (stationary waves see \code{\link{Ks}})
 #' @param a Numeric indicating the Earth's radio (m)
 #' @param plots Logical, if TRUE will produce filled.countour plots
 #' @param show.warnings Logical, if TRUE will warns about NaNs in sqrt(<0)
-#' @return list with one vector (lat) and 3 matrices (um, betam, and ksm)
+#' @return list with one vector (lat) and 1 matrix (ktotal_m)
 #' @importFrom ncdf4 nc_open ncvar_get nc_close ncdim_def ncvar_def
 #'  nc_create ncatt_put
 #' @importFrom graphics filled.contour
@@ -38,44 +37,21 @@
 #' input <- system.file("extdata",
 #'                      "uwnd.mon.mean_200hPa_2014JFM.nc",
 #'                       package = "raytracing")
-#' b <- betaks(u = input, plots = TRUE)
-#' b$ksm[] <- ifelse(b$ksm[] >= 16 |
-#'                   b$ksm[] <= 0, NA, b$ksm[])
+#' Ktotal <- Ktotal(u = input, cx = 6, plots = TRUE)
 #' cores <- c("#ff0000","#ff5a00","#ff9a00","#ffce00","#f0ff00")
-#' graphics::filled.contour(b$ksm[, -c(1:5, 69:73)] ,
+#' graphics::filled.contour(Ktotal$ktotal_m[, -c(1:5, 69:73)] ,
 #'                          col = rev(colorRampPalette(cores, bias = 0.5)(20)),
-#'                          main = "Ks")
-#'
-#' # u, lat and lon as numeric
-#' input <- system.file("extdata",
-#'                      "uwnd.mon.mean_200hPa_2014JFM.bin",
-#'                       package = "raytracing")
-#' u <- readBin(input,
-#'              what = numeric(),
-#'              size = 4,
-#'              n = 144*73*4)
-#' lat <- seq(-90, 90, 2.5)
-#' lon <- seq(-180, 180 - 1, 2.5)
-#' u <- matrix(u,
-#'             nrow = length(lon),
-#'             ncol = length(lat))
-#' graphics::filled.contour(u, main = "Zonal Wind Speed [m/s]")
-#' b <- betaks(u, lat, lon)
-#' b$ksm[] <- ifelse(b$ksm[] >= 16 |
-#'                   b$ksm[] <= 0, NA, b$ksm[])
-#' cores <- c("#ff0000","#ff5a00","#ff9a00","#ffce00","#f0ff00")
-#' graphics::filled.contour(b$ksm[, -c(1:5, 69:73)] ,
-#'                          col = rev(colorRampPalette(cores, bias = 0.5)(20)),
-#'                          main = "Ks")
+#'                          main = "K")
 #' }
-betaks <- function(u,
-                   lat = "lat",    # lon,
-                   lon = "lon",
-                   uname = "uwnd",   # lat
-                   ofile,
-                   a = 6371000,
-                   plots = FALSE,
-                   show.warnings = FALSE
+Ktotal <- function(u,
+               lat = "lat",      # lon,
+               lon = "lon",
+               uname = "uwnd",   # lat
+               cx,
+               ofile,
+               a = 6371000,
+               plots = FALSE,
+               show.warnings = FALSE
 ) {
   if(inherits(u, "character")){
     message("Detecting NetCDF")
@@ -87,11 +63,15 @@ betaks <- function(u,
 
   }
 
-
   dx       <- abs(lon[2] - lon[1])
   dy       <- abs(lat[2] - lat[1])
   nlat     <- length(lat)
   nlon     <- length(lon)
+
+  # cx
+  if (cx <= 0) {
+    stop(paste0("cx = ", cx,"\nZonal phase speed (cx) must be greater than zero.\nFor Stationary Waves please use Ks function."))
+  }
 
   # Define parameters and constants
   if(is.unsorted(lat)) {
@@ -112,8 +92,6 @@ betaks <- function(u,
                    ncol = nlat)
 
   # Calculate beta terms
-  # beta (mercator) using eq 2.2 from Hoskins & Ambrizzi (1993)
-  # using spherical coord. x cos phi
   # 1st term: df/dy ####
   dfdy <- matrix(NA,
                  nrow = 1,
@@ -159,34 +137,35 @@ betaks <- function(u,
 
   if(plots) graphics::filled.contour(beta_f[,], main = "Beta")
 
-  # Calculate Beta Mercator --> beta * cos(phi) #####
+  # Calculate Beta Mercartor --> beta * cos(phi) #####
   beta_mercator <- beta_f*cos(m_phirad)
 
   if(plots) graphics::filled.contour(beta_mercator,
                                      main = "Beta Mercator")
 
-  # Ks Mercator #######
-  # Ks (Mercator) using eq 2.13 from Hoskins & Ambrizzi (1993)
-  ks_mercator <- matrix(NA, nrow = nlon, ncol = nlat)
+  #cx_m <- cx/(cos(m_phirad))
 
-  ks_mercator[] <- ifelse(
+  # Ktotal mercator #######
+  ktotal_mercator <- matrix(NA, nrow = nlon, ncol = nlat)
+
+  ktotal_mercator[] <- ifelse(
     beta_mercator[] < 0 & u[] != 0, -1,
     ifelse(
       beta_mercator[] > 0 & u[] < 0, 30,
       ifelse(
         beta_mercator[] == 0 | u[] == 0, 0,
         if(show.warnings) {
-          a * sqrt( (beta_mercator * cos(m_phirad)) / u)
+          a * sqrt( (beta_mercator * cos(m_phirad)) / (u - cx))
         } else {
-          suppressWarnings(a * sqrt( (beta_mercator*cos(m_phirad)) / u))
+          suppressWarnings(a * sqrt( (beta_mercator*cos(m_phirad)) / (u - cx)))
         }
       )))
 
-  ks_mercator[] <- ifelse(ks_mercator[] >= 16 &
-                            ks_mercator[] != 30, 20, ks_mercator[])
+  ktotal_mercator[] <- ifelse(ktotal_mercator[] >= 16 &
+                            ktotal_mercator[] != 30, 20, ktotal_mercator[])
 
-  if(plots) graphics::hist(ks_mercator, main = "Ks")
-  if(plots) graphics::filled.contour(ks_mercator, main = "Ks")
+  if(plots) graphics::hist(ktotal_mercator, main = "Ktotal")
+  if(plots) graphics::filled.contour(ktotal_mercator, main = "Ktotal")
 
   # Adding sf objects ####
   # grid
@@ -202,38 +181,28 @@ betaks <- function(u,
   # Coordinates in x (longitude) are organized from 0 to 360
   # To transform to a spatial object with lat/long coordinates
   # we need to shift the x coordinates to -180 to 180.
-  # The matrix for `u`, `beta_mercator`, and `ks_mercator` are R objects with more
-  # points on y (rows), i.e., those matrix have more rows than columns, or
+  # The matrix for `ktotal_mercator` is an R object with more
+  # points on y (rows), i.e., this matrix have more rows than columns, or
   # longitudes are in y and latitudes on x.
-  # The functions `filled.contour` and `image` read those transposed matrix,
-  # adjusting them automatically on the plot, so we see longitude on x and
-  # latitude on y.
+  # The functions `filled.contour` and `image` read this `ktotal_mercator` transposed
+  # matrix, adjusting them automatically on the plot, so we see longitude on
+  # x and latitude on y.
   # To shift the spatial coordinates of the matrix we need to deal with the
   # rows of our matrix in R in the following way.
 
-  u_sf <- rbind(u[(nrow(u)/2 + 1):nrow(u), ],
-                u[1:(nrow(u)/2), ])
+  ktotal_m_sf <- rbind(ktotal_mercator[(nrow(ktotal_mercator)/2 + 1):nrow(ktotal_mercator), ],
+                  ktotal_mercator[1:(nrow(ktotal_mercator)/2), ])
 
-  betam_sf <- rbind(beta_mercator[(nrow(beta_mercator)/2 + 1):nrow(beta_mercator), ],
-                    beta_mercator[1:(nrow(beta_mercator)/2), ])
-
-  ksm_sf <- rbind(ks_mercator[(nrow(ks_mercator)/2 + 1):nrow(ks_mercator), ],
-                  ks_mercator[1:(nrow(ks_mercator)/2), ])
-
-  sfpoly <- sf::st_sf(data.frame(u = as.vector(u_sf)[1:length(g)],
-                                 betam = as.vector(betam_sf)[1:length(g)],
-                                 ksm = as.vector(ksm_sf)[1:length(g)]),
-              geometry = g,
-              crs = 4326)
+  sfpoly <- sf::st_sf(data.frame(ktotal_m = as.vector(ktotal_m_sf)[1:length(g)]),
+                      geometry = g,
+                      crs = 4326)
 
   if(missing(ofile)){
     return(list(lat = phi,
-                u = u,
-                betam = beta_mercator,
-                ksm = ks_mercator,
+                ktotal_m = ktotal_mercator,
                 sfpoly = sfpoly))
   } else {
-    cat("Writting the netcdf in ",ofile,"...\n")
+    cat("Writting the netcdf in ", ofile, "...\n")
 
     # Write the netcdf ####
     # definition of dimensions
@@ -245,20 +214,13 @@ betaks <- function(u,
                              vals = -lat)
 
     # definition of variables
-    UWND <- ncdf4::ncvar_def(name = "uwnd",
-                             units = "m s^-1",
-                             dim = list(XLONG, XLAT),
-                             longname="Zonal wind")
-    BETAM <- ncdf4::ncvar_def(name = "betam",
-                              units = "s^-1 m^-1",
-                              dim = list(XLONG, XLAT),
-                              longname="Meridional Gradient of the Absolute Vorticity in mercator coordinates")
-    KSM <- ncdf4::ncvar_def(name = "Ks",
-                            units = "",
-                            dim = list(XLONG, XLAT),
-                            longname = "Stationary Wavenumber (Ks)")
+    KM <- ncdf4::ncvar_def(name = "K",
+                           units = "",
+                           dim = list(XLONG, XLAT),
+                           longname = "Total Wavenumber (K)")
+
     vars_file <- ncdf4::nc_create(filename = ofile,
-                                  vars = list(UWND, BETAM, KSM))
+                                  vars = list(KM))
 
     cat(paste("The file has", vars_file$nvars, "variables\n"))
     cat(paste("The file has", vars_file$ndim, "dimensions\n"))
@@ -268,7 +230,7 @@ betaks <- function(u,
     ncdf4::ncatt_put(nc = vars_file,
                      varid = 0, # 0 para o arquivo
                      attname = "title",
-                     attval = "Basic state for calculate ray tracing")
+                     attval = "Total Wavenumber (K) in mercator coordinates")
     ncdf4::ncatt_put(nc = vars_file,
                      varid = 0, # 0 para o arquivo
                      attname = "Author",
@@ -290,30 +252,19 @@ betaks <- function(u,
                      attname = "references",
                      attval = "See: Hoskins and Ambrizzi (1993), Yang and Hoskins (1996), and Rehbein et al. (2020)")
 
-    # Add variables to the ofile
+    # K mercator
     ncdf4::ncvar_put(nc = vars_file,
-                     varid = UWND,
-                     vals = u,
-                     start = c(1,1),
-                     count = c(nlon,nlat))
-    ncdf4::ncvar_put(nc = vars_file,
-                     varid = BETAM,
-                     vals = beta_mercator,
-                     start = c(1,1),
-                     count = c(nlon,nlat))
-    ncdf4::ncvar_put(nc = vars_file,
-                     varid = KSM,
-                     vals = ks_mercator,
+                     varid = KM,
+                     vals = ktotal_mercator,
                      start = c(1,1),
                      count = c(nlon,nlat))
 
     ncdf4::nc_close(nc = vars_file)
 
+
     # Returning a list with the calculated variables
     return(list(lat = phi,
-                u = u,
-                betam = beta_mercator,
-                ksm = ks_mercator,
+                ktotal_m = ktotal_mercator,
                 sfpoly = sfpoly))
 
   }
